@@ -1,0 +1,68 @@
+[
+    {
+        "name": "ChatGPT Release", 
+        "date": "2022-11-30", 
+        "hashtags": ["chatgpt", "openai", "gpt3", "ai"],
+        "keywords": ["chatgpt", "openai", "gpt-3"]
+    },
+    {
+        "name": "GPT-4 Launch",   
+        "date": "2023-03-14", 
+        "hashtags": ["gpt4", "openai", "ai", "llm"],
+        "keywords": ["gpt-4", "multimodal"]
+    },
+    {
+        "name": "OpenAI Board Crisis", 
+        "date": "2023-11-17", 
+        "hashtags": ["openai", "samaltman", "eacc", "agi"],
+        "keywords": ["altman", "board", "qstar"]
+    },
+    {
+        "name": "Sora Announce",  
+        "date": "2024-02-15", 
+        "hashtags": ["sora", "openai", "videogen", "aiart"],
+        "keywords": ["sora", "simulation", "world model"]
+    },
+    {
+        "name": "Llama 3.1",      
+        "date": "2024-07-23", 
+        "hashtags": ["llama", "meta", "opensource", "localllm"],
+        "keywords": ["405b", "zuck", "llama 3"]
+    },
+    {
+        "name": "OpenAI o1",      
+        "date": "2024-09-12", 
+        "hashtags": ["o1", "strawberry", "reasoning", "ai"],
+        "keywords": ["chain of thought", "cot"]
+    },
+    {
+        "name": "DeepSeek R1",    
+        "date": "2025-01-20", 
+        "hashtags": ["deepseek", "r1", "deepseekr1", "opensource"],
+        "keywords": ["distillation", "chinese ai"]
+    },
+    {
+        "name": "Claude 3.7 Sonnet",
+        "date": "2025-02-25",
+        "hashtags": ["claude", "anthropic", "sonnet", "coding"],
+        "keywords": ["claude 3.7", "anthropic", "cursor"]
+    },
+    {
+        "name": "Gemini 2.5 Launch",
+        "date": "2025-03-25",
+        "hashtags": ["gemini", "google", "deepmind", "ai"],
+        "keywords": ["gemini 2.5", "google deepmind"]
+    },
+    {
+        "name": "Llama 4 Release",
+        "date": "2025-04-05",
+        "hashtags": ["llama4", "meta", "opensource", "agi"],
+        "keywords": ["llama 4", "zuckerberg", "meta ai"]
+    },
+    {
+        "name": "GPT-5 Announce",
+        "date": "2025-08-07",
+        "hashtags": ["gpt5", "openai", "agi", "singularity"],
+        "keywords": ["gpt-5", "next gen", "reasoning"]
+    }
+]
