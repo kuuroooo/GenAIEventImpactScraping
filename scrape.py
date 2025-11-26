@@ -3,8 +3,8 @@ import datetime
 import json
 import os
 import sys
+import argparse
 from mastodon import Mastodon, MastodonNotFoundError
-from textblob import TextBlob
 
 # ==========================================
 # VISUAL CONFIGURATION
@@ -19,140 +19,108 @@ class Colors:
     FAIL = '\033[91m'
     ENDC = '\033[0m'
     BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
 
 def print_banner():
     banner = f"""{Colors.CYAN}
-  __  __           _            _             
- |  \/  |         | |          | |            
- | \  / | __ _ ___| |_ ___   __| | ___  _ __  
- | |\/| |/ _` / __| __/ _ \ / _` |/ _ \| '_ \ 
- | |  | | (_| \__ \ || (_) | (_| | (_) | | | |
- |_|  |_|\__,_|___/\__\___/ \__,_|\___/|_| |_|
-                                              
-      {Colors.HEADER}:: AI EVENT IMPACT ANALYZER ::{Colors.ENDC}
+   _____                                  
+  / ____|                                 
+ | (___   ___ _ __ __ _ _ __   ___ _ __   
+  \___ \ / __| '__/ _` | '_ \ / _ \ '__|  
+  ____) | (__| | | (_| | |_) |  __/ |     
+ |_____/ \___|_|  \__,_| .__/ \___|_|     
+                       | |                
+      {Colors.HEADER}:: RAW DATA COLLECTOR FOR MASTODON::{Colors.ENDC}      |_|                
     """
     print(banner)
 
-def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=40, fill='='):
-    """
-    Call in a loop to create terminal progress bar
-    """
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=40):
+    if total == 0: total = 1
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filled_length = int(length * iteration // total)
-    bar = fill * filled_length + '-' * (length - filled_length)
-    # Clear line before printing to keep it on same line
+    bar = '█' * filled_length + '-' * (length - filled_length)
     sys.stdout.write(f'\r{prefix} |{Colors.BLUE}{bar}{Colors.ENDC}| {percent}% {suffix}')
     sys.stdout.flush()
-    if iteration == total:
-        print()
-
-# ==========================================
-# CONFIGURATION
-# ==========================================
-
-DATA_FILE = "mastodon_data.json"
-WINDOW_DAYS = 7
-MAX_PAGES_PER_TAG = 50
-
-# ==========================================
-# UTILITIES
-# ==========================================
-
-def load_config_files():
-    instances = []
-    if os.path.exists('instances.txt'):
-        with open('instances.txt', 'r') as f:
-            instances = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-    else:
-        print(f"{Colors.FAIL}[!] instances.txt not found.{Colors.ENDC}")
-        return [], []
-        
-    events = []
-    if os.path.exists('ai_events.json'):
-        with open('ai_events.json', 'r') as f:
-            events = json.load(f)
-            
-    return instances, events
-
-def get_sentiment(text):
-    clean_text = text.replace("<br>", " ").replace("<p>", "").replace("</p>", "")
-    blob = TextBlob(clean_text)
-    return blob.sentiment.polarity, blob.sentiment.subjectivity
-
-def classify_sentiment(polarity):
-    if polarity > 0.05: return 'Positive'
-    elif polarity < -0.05: return 'Negative'
-    return 'Neutral'
-
-def save_to_file(data_list):
-    """Appends a list of dictionaries to the JSON file (One JSON object per line)"""
-    if not data_list:
-        return
-        
-    with open(DATA_FILE, 'a', encoding='utf-8') as f:
-        for entry in data_list:
-            json.dump(entry, f, default=str)
-            f.write('\n') # Newline delimiter
+    if iteration == total: print()
 
 # ==========================================
 # CORE LOGIC
 # ==========================================
 
-def scrape_event(instance_url, event, existing_ids):
-    # Print Header for this specific scrape task
+def load_config_files(instances_path, events_path):
+    instances = []
+    if os.path.exists(instances_path):
+        with open(instances_path, 'r') as f:
+            instances = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    else:
+        print(f"{Colors.FAIL}[!] Instances file '{instances_path}' not found.{Colors.ENDC}")
+        
+    events = []
+    if os.path.exists(events_path):
+        with open(events_path, 'r') as f:
+            events = json.load(f)
+    else:
+        print(f"{Colors.FAIL}[!] Events file '{events_path}' not found.{Colors.ENDC}")
+            
+    return instances, events
+
+def save_to_file(data_list, filepath):
+    if not data_list: return
+    with open(filepath, 'a', encoding='utf-8') as f:
+        for entry in data_list:
+            json.dump(entry, f, default=str)
+            f.write('\n')
+
+def scrape_event(instance_url, event, existing_ids, window_days, output_file, access_token=None):
     print(f"\n{Colors.BOLD}TARGET:{Colors.ENDC} {event['name']} {Colors.BOLD}@{Colors.ENDC} {instance_url}")
     
     target_date = datetime.datetime.strptime(event['date'], "%Y-%m-%d")
-    start_date = target_date - datetime.timedelta(days=WINDOW_DAYS)
-    end_date = target_date + datetime.timedelta(days=WINDOW_DAYS)
-    
-    # Snowflake ID Calculation
-    max_id = int(end_date.timestamp() * 1000) << 16
+    start_date = target_date - datetime.timedelta(days=window_days)
+    end_window = target_date + datetime.timedelta(days=window_days)
+    max_id = int(end_window.timestamp() * 1000) << 16
     
     try:
-        client = Mastodon(api_base_url=instance_url)
-    except:
-        print(f"{Colors.FAIL}[ERROR] Connection failed to {instance_url}{Colors.ENDC}")
+        if access_token:
+            client = Mastodon(api_base_url=instance_url, access_token=access_token, request_timeout=10)
+        else:
+            client = Mastodon(api_base_url=instance_url, request_timeout=10)
+    except Exception as e:
+        print(f"{Colors.FAIL}[ERROR] Connection failed: {e}{Colors.ENDC}")
         return
 
     total_scraped_for_event = 0
+    max_pages = 50
     
     for tag in event['hashtags']:
         print(f"  > Scanning tag: {Colors.CYAN}#{tag}{Colors.ENDC}")
-        
         current_max_id = max_id
         batch = []
         seen_ids = set()
         
-        # Run progress bar loop
-        print_progress_bar(0, MAX_PAGES_PER_TAG, prefix='    Progress:', suffix='Initializing...', length=30)
+        print_progress_bar(0, max_pages, prefix='    Progress:', suffix='Initializing...', length=30)
         
-        for page in range(MAX_PAGES_PER_TAG):
+        for page in range(max_pages):
             try:
                 timeline = client.timeline_hashtag(tag, local=True, limit=40, max_id=current_max_id)
-                
                 if not timeline:
-                    # If no more posts, fill bar to 100% and break
-                    print_progress_bar(MAX_PAGES_PER_TAG, MAX_PAGES_PER_TAG, prefix='    Progress:', suffix=f'Done (End of Feed)', length=30)
+                    print_progress_bar(max_pages, max_pages, prefix='    Progress:', suffix='Done (End of Feed)', length=30)
                     break 
                 
                 current_max_id = timeline[-1]['id']
                 
                 for toot in timeline:
-                    created_at = toot['created_at'].replace(tzinfo=None)
+                    created_at = toot['created_at']
+                    if created_at.tzinfo: created_at = created_at.replace(tzinfo=None)
+                    
                     if created_at < start_date: continue
                     if toot['id'] in seen_ids: continue
                     
-                    # Unique ID check (Instance + ID)
                     unique_id = f"{instance_url}_{toot['id']}"
-                    if unique_id in existing_ids: continue # Skip duplicates
+                    if unique_id in existing_ids: continue 
                     
                     seen_ids.add(toot['id'])
                     existing_ids.add(unique_id)
                     
-                    pol, subj = get_sentiment(toot['content'])
-                    
+                    # RAW DATA ONLY - NO SENTIMENT CALCULATION
                     doc = {
                         "id": unique_id,
                         "event": event['name'],
@@ -160,40 +128,29 @@ def scrape_event(instance_url, event, existing_ids):
                         "instance": instance_url,
                         "content": toot['content'],
                         "created_at": toot['created_at'],
-                        "polarity": pol,
-                        "subjectivity": subj,
-                        "sentiment_class": classify_sentiment(pol),
                         "hashtag_searched": tag,
                         "url": toot['url']
                     }
                     batch.append(doc)
                 
-                # Check if we went too far back in time
-                if timeline[-1]['created_at'].replace(tzinfo=None) < start_date:
-                    print_progress_bar(MAX_PAGES_PER_TAG, MAX_PAGES_PER_TAG, prefix='    Progress:', suffix=f'Done (Date Reached)', length=30)
+                last_ts = timeline[-1]['created_at']
+                if last_ts.tzinfo: last_ts = last_ts.replace(tzinfo=None)
+                if last_ts < start_date:
+                    print_progress_bar(max_pages, max_pages, prefix='    Progress:', suffix='Done (Date Reached)', length=30)
                     break
                 
-                # Update Progress Bar
-                suffix_text = f"Found: {len(batch)}"
-                print_progress_bar(page + 1, MAX_PAGES_PER_TAG, prefix='    Progress:', suffix=suffix_text, length=30)
-                
+                print_progress_bar(page + 1, max_pages, prefix='    Progress:', suffix=f"Found: {len(batch)}", length=30)
                 time.sleep(0.2)
                 
-            except MastodonNotFoundError:
-                print_progress_bar(MAX_PAGES_PER_TAG, MAX_PAGES_PER_TAG, prefix='    Progress:', suffix='Tag Not Found', length=30)
-                break
-            except Exception:
+            except (MastodonNotFoundError, Exception):
                 break
             
         if batch:
-            save_to_file(batch)
+            save_to_file(batch, output_file)
             total_scraped_for_event += len(batch)
-            # Overwrite the progress bar line with a clean summary
-            sys.stdout.write(f"\r    {Colors.GREEN}[SUCCESS]{Colors.ENDC} Saved {len(batch)} new posts for #{tag}          \n")
+            sys.stdout.write(f"\r    {Colors.GREEN}[SUCCESS]{Colors.ENDC} Archived {len(batch)} raw posts          \n")
         else:
-            sys.stdout.write(f"\r    {Colors.WARNING}[INFO]{Colors.ENDC} No new relevant data found for #{tag}          \n")
-            
-    print(f"{Colors.GREEN}>> Event Complete.{Colors.ENDC} Total captured: {total_scraped_for_event}")
+            sys.stdout.write(f"\r    {Colors.WARNING}[INFO]{Colors.ENDC} No new data found for #{tag}          \n")
 
 # ==========================================
 # MAIN
@@ -201,35 +158,34 @@ def scrape_event(instance_url, event, existing_ids):
 
 def main():
     print_banner()
-    instances, events = load_config_files()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--token-file', type=str)
+    parser.add_argument('--output', type=str, default='mastodon_raw.json', help="Raw data storage")
+    parser.add_argument('--events', type=str, default='ai_events.json')
+    parser.add_argument('--instances', type=str, default='instances.txt')
+    parser.add_argument('--days', type=int, default=7)
+    args = parser.parse_args()
     
-    # Load existing IDs to prevent duplicates
-    existing_ids = set()
-    if os.path.exists(DATA_FILE):
-        print(f"{Colors.CYAN}[INFO] Reading existing database: {DATA_FILE}...{Colors.ENDC}")
-        try:
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if line.strip():
-                        doc = json.loads(line)
-                        existing_ids.add(doc.get('id'))
-            print(f"   -> Database contains {Colors.BOLD}{len(existing_ids)}{Colors.ENDC} records.")
-        except Exception as e:
-            print(f"   {Colors.FAIL}[!] Error reading file (starting fresh): {e}{Colors.ENDC}")
+    access_token = None
+    if args.token_file and os.path.exists(args.token_file):
+        with open(args.token_file, 'r') as f: access_token = f.read().strip()
 
-    print(f"\n{Colors.HEADER}=== INITIALIZING SCRAPER ==={Colors.ENDC}")
-    print(f"Targets: {Colors.BOLD}{len(events)}{Colors.ENDC} Events x {Colors.BOLD}{len(instances)}{Colors.ENDC} Instances")
-    print(f"Window:  {Colors.BOLD}{WINDOW_DAYS}{Colors.ENDC} days +/- event date")
-    print("-" * 50)
+    instances, events = load_config_files(args.instances, args.events)
+    existing_ids = set()
     
+    if os.path.exists(args.output):
+        print(f"{Colors.CYAN}[INFO] Loading existing raw database...{Colors.ENDC}")
+        try:
+            with open(args.output, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip(): existing_ids.add(json.loads(line).get('id'))
+            print(f"   -> Found {len(existing_ids)} records.")
+        except: pass
+
+    print(f"\n{Colors.HEADER}=== STARTING RAW SCRAPE ==={Colors.ENDC}")
     for event in events:
         for instance in instances:
-            scrape_event(instance, event, existing_ids)
-            
-    print(f"\n{Colors.GREEN}=========================================={Colors.ENDC}")
-    print(f"{Colors.GREEN}   MISSION ACCOMPLISHED{Colors.ENDC}")
-    print(f"{Colors.GREEN}=========================================={Colors.ENDC}")
-    print(f"Data saved to: {Colors.BOLD}{DATA_FILE}{Colors.ENDC}")
+            scrape_event(instance, event, existing_ids, args.days, args.output, access_token)
 
 if __name__ == "__main__":
     main()
